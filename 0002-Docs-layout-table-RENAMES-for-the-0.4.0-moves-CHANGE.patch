@@ -1,0 +1,315 @@
+From 78cd692341e55c40f17eee9811b2ad0cf60691e0 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 16 Nov 2026 13:08:52 +0000
+Subject: [PATCH 2/3] Docs: layout table, RENAMES for the 0.4.0 moves,
+ CHANGELOG, REMOVED re-check
+
+RENAMES.md gains the old-to-new table for every moved function.
+REMOVED.md notes that the earlier dead-code candidates were re-verified
+against minecraft: tags and runtime string references and are alive;
+the fire_queued path bug listed there is already fixed.
+---
+ CHANGELOG.md |   6 ++
+ README.md    |  24 +++----
+ REMOVED.md   |  12 ++++
+ RENAMES.md   | 189 +++++++++++++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 219 insertions(+), 12 deletions(-)
+
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 790bc30..f221de2 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -2,6 +2,9 @@
+ 
+ ## Unreleased
+ 
++### Removed
++- `pack.png` (CI packages it only when present).
++
+ ### Fixed
+ - Callback runner and example handler failed to load on 1.21.8 (`Invalid NBT path element ... stack[-1]<--[HERE]`): `stack[-1]{...}` is not valid NBT path syntax. The runner now mirrors the active entry to `vortex:callback top`; filter handlers with `top{id:"..."}`. `top` is restored after nested callbacks and cleared when the stack is empty.
+ 
+@@ -15,6 +18,9 @@
+ - `examples/vortex-example`: a demo datapack for the callback runner, the module callback tags, the blocked-macro hooks, input rules and dbg. It is not part of the release zip.
+ 
+ ### Changed
++- Breaking for callers (function IDs moved): top-level `player/`, `input/` and `tui/` moved to `api/player/`, `api/input/` and `api/tui/`. `core/cooldown`, `core/state`, `core/queue` and `core/lib` split: entry points used from outside now live in `api/cooldown`, `api/state`, `api/queue` and `systems/lib/`; helpers and handlers moved to `core/internal/core/`. Old-to-new table: `RENAMES.md`.
++- Every `.mcfunction` header ID now matches its file path (125 headers were stale).
++- `systems/cmd_gate` stays: 12 callers gate stored-string command execution.
+ - The diagnostic `tellraw` lines in `api/cb/*` (10), `core/internal/api/gamerule/debug_print` and the "passed the dynamic-command gate" notice to admins now write to `vortex:dbg` instead of chat. Menu and permission messages are unchanged.
+ 
+ ### Added
+diff --git a/README.md b/README.md
+index 946e3b7..f665676 100644
+--- a/README.md
++++ b/README.md
+@@ -8,23 +8,23 @@ macroEngine-Datapack-v26.3; old-to-new names for this layout are listed in `RENA
+ 
+ | Folder | Purpose | Stable API? |
+ |---|---|---|
+-| `api/` | Public entry points, grouped by feature (`cmd`, `perm`, `store`, `toggle`, `title`, `cb`, `block`, `container`, `notice`, ...) | Yes |
+-| `player/` | Player helpers: `get/*`, `is/*`, `var/*`, `run/*`, plus `inv/` and `team/` | Yes |
+-| `world/` | World helpers: `block/*`, `region/*` (clone, fill), `time/*`, `entity/*`, `weather` | Yes |
+-| `input/` | Text-input capture: `anvil`, `sign`, `lectern`, ... with `give/*`, `summon/*` and `validate/*` | Yes |
++| `api/` | Public entry points, grouped by feature (`cmd`, `perm`, `store`, `toggle`, `title`, `cb`, `block`, `container`, `notice`, `cooldown`, `state`, `queue`, ...) | Yes |
++| `api/player/` | Player helpers (moved from top-level `player/` in 0.4.0): `get/*`, `is/*`, `var/*`, `run/*`, plus `inv/` and `team/` | Yes |
++| `api/input/` | Text-input capture (moved from top-level `input/` in 0.4.0): `anvil`, `sign`, `lectern`, ... with `give/*`, `summon/*` and `validate/*` | Yes |
++| `api/tui/` | Text-UI helpers (moved from top-level `tui/` in 0.4.0) | Yes |
+ | `api/dialog/` | Runtime dialog builder (`begin`, `title`, `body`, `button`, `input`, `show`, ...): per-player tickets route non-OP button clicks back to server functions. Ported from Modalith 2.2.0, see https://github.com/vortaforge/docs and `NOTICE-modalith.md` | Yes |
+-| `events/`, `tui/` | Event bus and text-UI helpers | Yes |
++| `events/`, `world/` | Event bus; world helpers (`block/*`, `region/*`, `time/*`, `entity/*`, `weather`) | Yes |
+ | `systems/` | Reusable building blocks (`math`, `string`, `hook`, `flag`, `rng`, `uuid`, `log`, ...) | Yes |
+-| `core/` | Engine runtime: `config`, `state`, `tick`, `queue`, `cooldown`, `dispatch`, `runtime` | No |
+-| `core/lib/` | Scheduling toolkit, one folder per feature: `schedule/`, `wait/`, `repeat/`, `once/`, `debounce/`, `queue/`, `for_each/`, `batch/`, `fiber/`, `string/` | No |
+-| `core/internal/` | Implementation behind the folders above (mirrors their layout) | No |
++| `systems/lib/` | Scheduling toolkit, one folder per feature: `schedule/`, `wait/`, `repeat/`, `once/`, `debounce/`, `queue/`, `for_each/`, `batch/`, `fiber/`, `string/` (moved from `core/lib/` in 0.4.0) | Yes |
++| `core/` | Engine runtime: `config`, `tick`, `dispatch`, `runtime`, `version` | No |
++| `core/internal/` | Implementation and handlers behind the folders above. Internal parts of the moved modules live at `core/internal/core/{lib,queue,state,cooldown}/` | No |
+ 
+ Other data folders: `advancement/`, `predicate/`, `loot_table/`, `item_modifier/`, `recipe/`, `tags/`.
+ 
+ ## Conventions
+ 
+ - Every `.mcfunction` carries its own function ID in its header comment, plus `[MACRO]` when it uses `$` lines.
+-- Function folders group by feature, then by action: `player/var/set`, `core/lib/wait/cmd_as`.
++- Function folders group by feature, then by action: `api/player/var/set`, `systems/lib/wait/cmd_as`.
+ - Scoreboard objectives, entity tags and macro keys are `snake_case` and prefixed `vortex.` (objectives and tags).
+ - Storage IDs are `vortex:<module>` with no leading underscore.
+ - Files use LF line endings, end with a newline, and JSON uses 2-space indentation.
+@@ -52,13 +52,13 @@ execute if data storage vortex:callback top{id:"mypack:round_won"} run function
+ 
+ `function vortex:systems/dbg/out {src:"mypack",msg:"text"}` and `.../err` append to `vortex:dbg out` / `err` (50 entries each) instead of printing. `function vortex:systems/dbg/show` (vortex.admin) prints them on request.
+ 
+-## Input rules (`input/validate/rule*`)
++## Input rules (`api/input/validate/rule*`)
+ 
+ Restrict or block values without a gate; your datapack decides what a failure means:
+ 
+ ```mcfunction
+-function vortex:input/validate/rule_define {name:"yesno",rule:{allow:["yes","no"],ignore_case:1b}}
+-function vortex:input/validate/rule {source:"book.raw",rule:"yesno"}
++function vortex:api/input/validate/rule_define {name:"yesno",rule:{allow:["yes","no"],ignore_case:1b}}
++function vortex:api/input/validate/rule {source:"book.raw",rule:"yesno"}
+ execute if data storage vortex:input_validate result{valid:1b} run say ok
+ ```
+ 
+diff --git a/REMOVED.md b/REMOVED.md
+index 4641ea1..7da006b 100644
+--- a/REMOVED.md
++++ b/REMOVED.md
+@@ -26,3 +26,15 @@ Nothing live referenced any of the items below.
+ - `core/internal/text/count` and `core/internal/text/has`: helper API of the text module.
+ - `core/internal/events/fire_deferred`: `events/fire_queued` points at the wrong path, `events/internal/fire_deferred`, so the queued event never runs. Fix the path there rather than deleting this function.
+ - Predicates, loot tables, item modifiers and recipes: public assets for dependent packs, not referenced internally by design.
++
++
++## Re-check during the 0.4.0 restructure
++
++The list above was re-verified against the full call graph, including `minecraft:` tags and runtime string references. Nothing is removed by this pass, and two earlier notes are out of date:
++
++- `core/internal/events/fire_deferred` is alive. `events/fire_queued` already points at `core/internal/events/fire_deferred`, so the path bug described under "Kept on purpose" is fixed.
++- `core/internal/dialog/tick` and `core/internal/notice/tick` are alive: both are in `minecraft:tick`.
++- `systems/log/print_entry` is alive: `systems/log/show` names it as a string.
++- `core/internal/core/lib/fiber/resume_dispatch` is reached through the queue and dispatch tag chain described in its header.
++- `core/internal/systems/hook/on_open_gui` is reached through the `core/internal/player/open_gui` tag chain.
++- `systems/cmd_gate/*` has 12 callers and gates stored-string command execution. It is not dead.
+diff --git a/RENAMES.md b/RENAMES.md
+index cedec30..60e812c 100644
+--- a/RENAMES.md
++++ b/RENAMES.md
+@@ -139,3 +139,192 @@ Frozen on purpose: `api/cmd/*` (dispatched dynamically by `api/cmd/$(type)`), `a
+ | `vortex_run` | `vortex.run` | trigger objective |
+ | `vortex_input` | `vortex.input` | entity tag |
+ | `customData` | `custom_data` | macro / storage key |
++
++
++## Restructure 0.4.0: module layout
++
++Top-level `player/`, `input/` and `tui/` moved under `api/`. The `core/` modules `cooldown`, `state`, `queue` and `lib` split: callers outside `core/` see public entry points under `api/` (`cooldown`, `state`, `queue`) or `systems/lib/` (`lib`); helpers and handlers moved under `core/internal/core/`. Function IDs below changed, so update callers. Storage, scoreboard and tag IDs did not change; tags under `tags/function/` were kept in place and only their function members were rewritten.
++
++| Old | New |
++|---|---|
++| `core/cooldown/check` | `core/internal/core/cooldown/check` |
++| `core/cooldown/clear` | `api/cooldown/clear` |
++| `core/cooldown/clear_all` | `api/cooldown/clear_all` |
++| `core/cooldown/detail` | `api/cooldown/detail` |
++| `core/cooldown/extend` | `api/cooldown/extend` |
++| `core/cooldown/is_ready` | `api/cooldown/is_ready` |
++| `core/cooldown/pause` | `api/cooldown/pause` |
++| `core/cooldown/remaining` | `api/cooldown/remaining` |
++| `core/cooldown/reset_all` | `api/cooldown/reset_all` |
++| `core/cooldown/resume` | `api/cooldown/resume` |
++| `core/cooldown/set` | `api/cooldown/set` |
++| `core/cooldown/try_use` | `api/cooldown/try_use` |
++| `core/lib/batch/add` | `systems/lib/batch/add` |
++| `core/lib/batch/begin` | `systems/lib/batch/begin` |
++| `core/lib/batch/cancel` | `systems/lib/batch/cancel` |
++| `core/lib/batch/flush` | `systems/lib/batch/flush` |
++| `core/lib/debounce/cmd` | `systems/lib/debounce/cmd` |
++| `core/lib/debounce/run` | `systems/lib/debounce/run` |
++| `core/lib/fiber/is_alive` | `systems/lib/fiber/is_alive` |
++| `core/lib/fiber/kill` | `systems/lib/fiber/kill` |
++| `core/lib/fiber/resume` | `systems/lib/fiber/resume` |
++| `core/lib/fiber/spawn` | `systems/lib/fiber/spawn` |
++| `core/lib/fiber/yield` | `systems/lib/fiber/yield` |
++| `core/lib/for_each/entity` | `systems/lib/for_each/entity` |
++| `core/lib/for_each/list` | `systems/lib/for_each/list` |
++| `core/lib/for_each/player` | `systems/lib/for_each/player` |
++| `core/lib/for_each/player_at` | `systems/lib/for_each/player_at` |
++| `core/lib/once/cmd` | `core/internal/core/lib/once/cmd` |
++| `core/lib/once/per_player` | `systems/lib/once/per_player` |
++| `core/lib/once/per_player_reset` | `systems/lib/once/per_player_reset` |
++| `core/lib/once/run` | `systems/lib/once/run` |
++| `core/lib/queue/add` | `core/internal/core/lib/queue/add` |
++| `core/lib/queue/add_as` | `systems/lib/queue/add_as` |
++| `core/lib/queue/add_cmd` | `core/internal/core/lib/queue/add_cmd` |
++| `core/lib/queue/clear` | `systems/lib/queue/clear` |
++| `core/lib/queue/process` | `systems/lib/queue/process` |
++| `core/lib/repeat/run` | `systems/lib/repeat/run` |
++| `core/lib/repeat/run_as` | `systems/lib/repeat/run_as` |
++| `core/lib/repeat/times` | `systems/lib/repeat/times` |
++| `core/lib/schedule/cancel` | `systems/lib/schedule/cancel` |
++| `core/lib/schedule/cmd` | `core/internal/core/lib/schedule/cmd` |
++| `core/lib/schedule/cmd_as` | `systems/lib/schedule/cmd_as` |
++| `core/lib/schedule/cmd_if` | `systems/lib/schedule/cmd_if` |
++| `core/lib/schedule/list` | `systems/lib/schedule/list` |
++| `core/lib/schedule/renew` | `systems/lib/schedule/renew` |
++| `core/lib/schedule/reset` | `systems/lib/schedule/reset` |
++| `core/lib/schedule/run_as` | `systems/lib/schedule/run_as` |
++| `core/lib/schedule/run_if` | `systems/lib/schedule/run_if` |
++| `core/lib/string/concat` | `systems/lib/string/concat` |
++| `core/lib/string/find` | `systems/lib/string/find` |
++| `core/lib/string/insert` | `systems/lib/string/insert` |
++| `core/lib/string/replace` | `systems/lib/string/replace` |
++| `core/lib/string/split` | `systems/lib/string/split` |
++| `core/lib/string/to_lowercase` | `systems/lib/string/to_lowercase` |
++| `core/lib/string/to_lowercase_full` | `systems/lib/string/to_lowercase_full` |
++| `core/lib/string/to_number` | `core/internal/core/lib/string/to_number` |
++| `core/lib/string/to_string` | `systems/lib/string/to_string` |
++| `core/lib/string/to_uppercase` | `systems/lib/string/to_uppercase` |
++| `core/lib/string/to_uppercase_full` | `systems/lib/string/to_uppercase_full` |
++| `core/lib/throttle` | `systems/lib/throttle` |
++| `core/lib/ticks_to_time` | `systems/lib/ticks_to_time` |
++| `core/lib/wait/cmd` | `systems/lib/wait/cmd` |
++| `core/lib/wait/cmd_as` | `systems/lib/wait/cmd_as` |
++| `core/lib/wait/run` | `systems/lib/wait/run` |
++| `core/lib/wait/run_as` | `systems/lib/wait/run_as` |
++| `core/queue/clear` | `api/queue/clear` |
++| `core/queue/flush` | `api/queue/flush` |
++| `core/queue/push` | `api/queue/push` |
++| `core/queue/push_as` | `api/queue/push_as` |
++| `core/queue/set_rate` | `api/queue/set_rate` |
++| `core/queue/size` | `api/queue/size` |
++| `core/state/clear` | `api/state/clear` |
++| `core/state/clear_all` | `api/state/clear_all` |
++| `core/state/get` | `api/state/get` |
++| `core/state/get_score` | `api/state/get_score` |
++| `core/state/is` | `api/state/is` |
++| `core/state/list` | `api/state/list` |
++| `core/state/reset_score` | `api/state/reset_score` |
++| `core/state/set` | `api/state/set` |
++| `core/state/set_if` | `api/state/set_if` |
++| `core/state/set_score` | `api/state/set_score` |
++| `core/state/toggle` | `api/state/toggle` |
++| `input/anvil` | `api/input/anvil` |
++| `input/command_block_minecart` | `api/input/command_block_minecart` |
++| `input/give/anvil` | `api/input/give/anvil` |
++| `input/give/anvil_custom` | `api/input/give/anvil_custom` |
++| `input/give/name_tag` | `api/input/give/name_tag` |
++| `input/give/writable_book` | `api/input/give/writable_book` |
++| `input/lectern` | `api/input/lectern` |
++| `input/name_tag` | `api/input/name_tag` |
++| `input/private/anvil_capture` | `api/input/private/anvil_capture` |
++| `input/private/anvil_done` | `api/input/private/anvil_done` |
++| `input/private/anvil_end` | `api/input/private/anvil_end` |
++| `input/private/anvil_open` | `api/input/private/anvil_open` |
++| `input/private/anvil_tick` | `api/input/private/anvil_tick` |
++| `input/private/book_capture` | `api/input/private/book_capture` |
++| `input/private/cbm_align_tp` | `api/input/private/cbm_align_tp` |
++| `input/private/cbm_capture` | `api/input/private/cbm_capture` |
++| `input/private/cbm_process` | `api/input/private/cbm_process` |
++| `input/private/lectern_capture` | `api/input/private/lectern_capture` |
++| `input/private/lectern_ray_loop` | `api/input/private/lectern_ray_loop` |
++| `input/private/lectern_ray_start` | `api/input/private/lectern_ray_start` |
++| `input/private/name_tag_capture` | `api/input/private/name_tag_capture` |
++| `input/private/sign_capture` | `api/input/private/sign_capture` |
++| `input/private/sign_capture_from_components` | `api/input/private/sign_capture_from_components` |
++| `input/private/sign_ray_loop` | `api/input/private/sign_ray_loop` |
++| `input/private/sign_ray_start` | `api/input/private/sign_ray_start` |
++| `input/sign` | `api/input/sign` |
++| `input/summon/command_block_minecart` | `api/input/summon/command_block_minecart` |
++| `input/validate/_rule_lower_cand` | `api/input/validate/_rule_lower_cand` |
++| `input/validate/_rule_lower_s` | `api/input/validate/_rule_lower_s` |
++| `input/validate/_rule_scan` | `api/input/validate/_rule_scan` |
++| `input/validate/check` | `api/input/validate/check` |
++| `input/validate/int_range` | `api/input/validate/int_range` |
++| `input/validate/length` | `api/input/validate/length` |
++| `input/validate/rule` | `api/input/validate/rule` |
++| `input/validate/rule_define` | `api/input/validate/rule_define` |
++| `input/writable_book` | `api/input/writable_book` |
++| `player/get/air` | `api/player/get/air` |
++| `player/get/armor` | `api/player/get/armor` |
++| `player/get/dimension` | `api/player/get/dimension` |
++| `player/get/food` | `api/player/get/food` |
++| `player/get/gamemode` | `api/player/get/gamemode` |
++| `player/get/health` | `api/player/get/health` |
++| `player/get/name` | `api/player/get/name` |
++| `player/get/online_count` | `api/player/get/online_count` |
++| `player/get/pos` | `api/player/get/pos` |
++| `player/get/xp` | `api/player/get/xp` |
++| `player/init` | `api/player/init` |
++| `player/inv/chest_minecart_if_item` | `api/player/inv/chest_minecart_if_item` |
++| `player/inv/chest_minecart_unless_item` | `api/player/inv/chest_minecart_unless_item` |
++| `player/inv/clear_custom` | `api/player/inv/clear_custom` |
++| `player/inv/count_item` | `api/player/inv/count_item` |
++| `player/inv/cursor_item` | `api/player/inv/cursor_item` |
++| `player/inv/offhand_item` | `api/player/inv/offhand_item` |
++| `player/inv/player_if_item` | `api/player/inv/player_if_item` |
++| `player/inv/player_slot_if_item` | `api/player/inv/player_slot_if_item` |
++| `player/inv/player_unless_item` | `api/player/inv/player_unless_item` |
++| `player/inv/selected_item` | `api/player/inv/selected_item` |
++| `player/inv/transfer_item` | `api/player/inv/transfer_item` |
++| `player/is/burning` | `api/player/is/burning` |
++| `player/is/flying` | `api/player/is/flying` |
++| `player/is/gliding` | `api/player/is/gliding` |
++| `player/is/in_water` | `api/player/is/in_water` |
++| `player/is/on_ground` | `api/player/is/on_ground` |
++| `player/is/online` | `api/player/is/online` |
++| `player/is/sneaking` | `api/player/is/sneaking` |
++| `player/is/sprinting` | `api/player/is/sprinting` |
++| `player/is/swimming` | `api/player/is/swimming` |
++| `player/online_check` | `api/player/online_check` |
++| `player/reset` | `api/player/reset` |
++| `player/run/cmd_as_uuid` | `api/player/run/cmd_as_uuid` |
++| `player/run/func_as_uuid` | `api/player/run/func_as_uuid` |
++| `player/team/add` | `api/player/team/add` |
++| `player/team/count` | `api/player/team/count` |
++| `player/team/create` | `api/player/team/create` |
++| `player/team/delete` | `api/player/team/delete` |
++| `player/team/has` | `api/player/team/has` |
++| `player/team/list` | `api/player/team/list` |
++| `player/team/remove` | `api/player/team/remove` |
++| `player/team/set_color` | `api/player/team/set_color` |
++| `player/team/set_friendly_fire` | `api/player/team/set_friendly_fire` |
++| `player/var/add` | `api/player/var/add` |
++| `player/var/add_clamped` | `api/player/var/add_clamped` |
++| `player/var/add_default` | `api/player/var/add_default` |
++| `player/var/clamp` | `api/player/var/clamp` |
++| `player/var/copy` | `api/player/var/copy` |
++| `player/var/decrement` | `api/player/var/decrement` |
++| `player/var/delete` | `api/player/var/delete` |
++| `player/var/get` | `api/player/var/get` |
++| `player/var/has` | `api/player/var/has` |
++| `player/var/increment` | `api/player/var/increment` |
++| `player/var/list` | `api/player/var/list` |
++| `player/var/set` | `api/player/var/set` |
++| `player/var/swap` | `api/player/var/swap` |
++| `player/var/toggle` | `api/player/var/toggle` |
++| `player/var/transfer` | `api/player/var/transfer` |
++| `tui/button` | `api/tui/button` |
++| `tui/divider` | `api/tui/divider` |
++| `tui/header` | `api/tui/header` |
++| `tui/line` | `api/tui/line` |
+-- 
+2.43.0
+

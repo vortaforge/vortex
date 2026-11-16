@@ -1,0 +1,148 @@
+From 88de3054ef48e626fdd348ecda62e5ba19508474 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 16 Nov 2026 10:28:06 +0000
+Subject: [PATCH] Fix callback runner: stack[-1]{...} is invalid NBT path
+ syntax, filter on a top mirror
+
+---
+ CHANGELOG.md                                      |  3 +++
+ README.md                                         |  4 ++--
+ data/vortex/function/api/callback/run.mcfunction  |  6 +++---
+ .../core/internal/callback/blocked/cmd.mcfunction |  2 +-
+ .../internal/callback/blocked/function.mcfunction |  2 +-
+ .../core/internal/callback/run.mcfunction         | 15 ++++++++++++---
+ .../function/callback/dispatch_handler.mcfunction |  4 ++--
+ 7 files changed, 24 insertions(+), 12 deletions(-)
+
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 618b29e..790bc30 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -2,6 +2,9 @@
+ 
+ ## Unreleased
+ 
++### Fixed
++- Callback runner and example handler failed to load on 1.21.8 (`Invalid NBT path element ... stack[-1]<--[HERE]`): `stack[-1]{...}` is not valid NBT path syntax. The runner now mirrors the active entry to `vortex:callback top`; filter handlers with `top{id:"..."}`. `top` is restored after nested callbacks and cleared when the stack is empty.
++
+ ### Added
+ - Macro toggles: `module_macro_cmd` (every `$$(cmd)` line) and `module_macro_function` (every `$function $(id)` line whose target comes from the caller). Both default to `1b`. Switch them with `vortex:api/toggle/macro_cmd/{true,false}` and `vortex:api/toggle/macro_function/{true,false}` (vortex.admin only), the toggle menu, or `core/config/set`. `$function` lines with a fixed target (dialog, rate_limit, rng, fiber plumbing) are not gated, so turning the toggle off cannot break the engine itself.
+ - Shared callback runner `vortex:core/internal/callback/run`, with `vortex:api/callback/run` and `run_id` as thin public wrappers. No module toggle and no config flag. The ID comes from storage `vortex:callback in`, is string-checked (coerced to a string, rejected when empty or when it has a quote or backslash, lower-cased), pushed on a stack, and passed to the handlers in the function tags. Handlers compare the ID themselves (`stack[-1].id`). Re-entrant up to 8 levels; deeper calls are dropped and logged to `dbg.err`.
+diff --git a/README.md b/README.md
+index 1f3b7fe..946e3b7 100644
+--- a/README.md
++++ b/README.md
+@@ -40,13 +40,13 @@ data modify storage vortex:callback in set value {id:"mypack:round_won",args:{te
+ function vortex:api/callback/run
+ 
+ # handler, listed by your pack in data/vortex/tags/function/callback/dispatch.json
+-execute if data storage vortex:callback stack[-1]{id:"mypack:round_won"} run function mypack:on_round_won
++execute if data storage vortex:callback top{id:"mypack:round_won"} run function mypack:on_round_won
+ ```
+ 
+ - IDs are stored lower-case; empty IDs and IDs with a quote or backslash are rejected (reason in `dbg.err`).
+ - Tags: `#vortex:callback/dispatch` sees every callback. `#vortex:callback/macro_cmd` and `#vortex:callback/macro_function` additionally run for callbacks with `module:"macro_cmd"` / `"macro_function"`.
+ - When `macro_cmd` or `macro_function` is switched off, every guarded `$$(cmd)` / `$function $(id)` site fires `vortex:macro_cmd_blocked` / `vortex:macro_function_blocked` before it stops; `stack[-1].site` names the blocked function. The macro value is not forwarded.
+-- Handlers only read `stack[-1]`. Nesting is allowed up to 8 levels.
++- Handlers only read `top` (a copy of `stack[-1]`; `stack[-1]{...}` is not valid NBT path syntax, so filter on `top{...}`). Nesting is allowed up to 8 levels.
+ 
+ ## Debug output (`systems/dbg`)
+ 
+diff --git a/data/vortex/function/api/callback/run.mcfunction b/data/vortex/function/api/callback/run.mcfunction
+index 7f0d87a..9a072f6 100644
+--- a/data/vortex/function/api/callback/run.mcfunction
++++ b/data/vortex/function/api/callback/run.mcfunction
+@@ -7,14 +7,14 @@
+ #   id      (string)  callback ID, e.g. "mypack:round_won". Stored lower-case: write handlers
+ #                     with lower-case IDs. Empty IDs and IDs with a quote or backslash are rejected.
+ #   module  (string)  optional "macro_cmd" or "macro_function": also runs that module's tag
+-#   args    (any)     optional payload, read by handlers from stack[-1].args
++#   args    (any)     optional payload, read by handlers from top.args (or stack[-1].args)
+ #
+ # HANDLERS live in function tags and compare the ID themselves:
+ #   #vortex:callback/dispatch        every callback
+ #   #vortex:callback/macro_cmd       module "macro_cmd"      (fired when $$(cmd) is switched off)
+ #   #vortex:callback/macro_function  module "macro_function" (fired when $function $(id) is switched off)
+-#       execute if data vortex:callback stack[-1]{id:"mypack:round_won"} run function mypack:on_round_won
+-#   Handlers only read stack[-1]; the runner removes it afterwards.
++#       execute if data storage vortex:callback top{id:"mypack:round_won"} run function mypack:on_round_won
++#   Handlers only read top / stack[-1]; the runner removes the entry afterwards.
+ #
+ # EXAMPLE
+ #   data modify storage vortex:callback in set value {id:"mypack:round_won",args:{team:"red"}}
+diff --git a/data/vortex/function/core/internal/callback/blocked/cmd.mcfunction b/data/vortex/function/core/internal/callback/blocked/cmd.mcfunction
+index 22da588..71378ea 100644
+--- a/data/vortex/function/core/internal/callback/blocked/cmd.mcfunction
++++ b/data/vortex/function/core/internal/callback/blocked/cmd.mcfunction
+@@ -8,7 +8,7 @@
+ # into a macro string is exactly what the toggle exists to stop.
+ #
+ # Handler example (listed in #vortex:callback/macro_cmd or #vortex:callback/dispatch):
+-#   execute if data vortex:callback stack[-1]{id:"vortex:macro_cmd_blocked"} run function mypack:on_blocked
++#   execute if data storage vortex:callback top{id:"vortex:macro_cmd_blocked"} run function mypack:on_blocked
+ #   (the blocked function path is in vortex:callback stack[-1].site)
+ #
+ # RETURN 0: the guarded function still stops, exactly as before.
+diff --git a/data/vortex/function/core/internal/callback/blocked/function.mcfunction b/data/vortex/function/core/internal/callback/blocked/function.mcfunction
+index 8aecdf3..f7b1987 100644
+--- a/data/vortex/function/core/internal/callback/blocked/function.mcfunction
++++ b/data/vortex/function/core/internal/callback/blocked/function.mcfunction
+@@ -8,7 +8,7 @@
+ # into a macro string is exactly what the toggle exists to stop.
+ #
+ # Handler example (listed in #vortex:callback/macro_function or #vortex:callback/dispatch):
+-#   execute if data vortex:callback stack[-1]{id:"vortex:macro_function_blocked"} run function mypack:on_blocked
++#   execute if data storage vortex:callback top{id:"vortex:macro_function_blocked"} run function mypack:on_blocked
+ #   (the blocked function path is in vortex:callback stack[-1].site)
+ #
+ # RETURN 0: the guarded function still stops, exactly as before.
+diff --git a/data/vortex/function/core/internal/callback/run.mcfunction b/data/vortex/function/core/internal/callback/run.mcfunction
+index 410242b..0d45271 100644
+--- a/data/vortex/function/core/internal/callback/run.mcfunction
++++ b/data/vortex/function/core/internal/callback/run.mcfunction
+@@ -17,7 +17,9 @@
+ #   2. in is pushed on storage vortex:callback stack and removed
+ #   3. module-specific tag first (#vortex:callback/<module>), then the shared tag
+ #      #vortex:callback/dispatch, which sees every callback
+-#   4. stack[-1] is removed, so storage is clean afterwards
++#   4. stack[-1] is removed and `top` is restored (or cleared), so storage is clean afterwards
++#   `top` is a copy of stack[-1] made for handlers: filter it with top{id:"..."}, because
++#   stack[-1]{...} is not valid NBT path syntax
+ #
+ # DEPTH: a handler may fire callbacks itself, up to 8 levels. A deeper call is dropped and
+ # logged to dbg.err, which also stops a handler that trips a blocked macro site from looping.
+@@ -41,9 +43,16 @@ execute if data storage vortex:callback in.module unless data storage vortex:cal
+ data modify storage vortex:callback stack append from storage vortex:callback in
+ data remove storage vortex:callback in
+ 
+-execute if data storage vortex:callback stack[-1]{module:"macro_cmd"} run function #vortex:callback/macro_cmd
+-execute if data storage vortex:callback stack[-1]{module:"macro_function"} run function #vortex:callback/macro_function
++# NBT paths cannot take a compound filter after an index ("stack[-1]{id:...}" fails to parse,
++# "Invalid NBT path element"), so the active entry is mirrored to `top`, which handlers can filter.
++data modify storage vortex:callback top set from storage vortex:callback stack[-1]
++
++execute if data storage vortex:callback top{module:"macro_cmd"} run function #vortex:callback/macro_cmd
++execute if data storage vortex:callback top{module:"macro_function"} run function #vortex:callback/macro_function
+ function #vortex:callback/dispatch
+ 
++# pop, then point `top` back at the caller's entry (nested callbacks) or clear it
+ data remove storage vortex:callback stack[-1]
++data remove storage vortex:callback top
++execute if data storage vortex:callback stack[-1] run data modify storage vortex:callback top set from storage vortex:callback stack[-1]
+ return 1
+diff --git a/examples/vortex-example/data/vortex_example/function/callback/dispatch_handler.mcfunction b/examples/vortex-example/data/vortex_example/function/callback/dispatch_handler.mcfunction
+index ad899f1..894245a 100644
+--- a/examples/vortex-example/data/vortex_example/function/callback/dispatch_handler.mcfunction
++++ b/examples/vortex-example/data/vortex_example/function/callback/dispatch_handler.mcfunction
+@@ -1,6 +1,6 @@
+ # vortex_example:callback/dispatch_handler
+-# Listed in #vortex:callback/dispatch, so it sees every callback. It only reads stack[-1]
++# Listed in #vortex:callback/dispatch, so it sees every callback. It only reads top (a copy of stack[-1])
+ # and never removes it; the runner pops the entry afterwards.
+ # AI-assisted: written with Claude (Anthropic); see CREDITS.md in the repo root.
+ 
+-execute if data storage vortex:callback stack[-1]{id:"vortex_example:hello"} run function vortex_example:callback/on_hello
++execute if data storage vortex:callback top{id:"vortex_example:hello"} run function vortex_example:callback/on_hello
+-- 
+2.43.0
+
