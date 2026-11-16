@@ -63,3 +63,7 @@ execute if data storage vortex:input_validate result{valid:1b} run say ok
 ```
 
 `allow` = only these values, `deny` = never these, entries may be strings or numbers (`allow:[0,1]`).
+
+## Example pack
+
+`examples/vortex-example` is a small datapack that uses the callback runner, the module callback tags, the blocked-macro hooks, input rules and dbg. See its README.
