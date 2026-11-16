@@ -9,6 +9,7 @@
 - When `module_macro_cmd` / `module_macro_function` is off, each of the 21 guarded `$$(cmd)` / `$function $(id)` sites now fires a callback (`vortex:macro_cmd_blocked` / `vortex:macro_function_blocked`, `stack[-1].site` = the blocked function path) before it returns 0. The macro value itself is not forwarded.
 - `vortex:systems/dbg/{out,err,show,clear}`: storage-based debug output (`vortex:dbg out` / `err`, 50 entries each). `show` is the only place that prints to chat.
 - Input rules, not a gate: `vortex:input/validate/rule_define` (`allow`, `deny`, `ignore_case`) and `vortex:input/validate/rule`. Example: `allow:["yes","no"]` or `allow:[0,1]`. The result goes to `vortex:input_validate result` like the other validators.
+- `examples/vortex-example`: a demo datapack for the callback runner, the module callback tags, the blocked-macro hooks, input rules and dbg. It is not part of the release zip.
 
 ### Changed
 - The diagnostic `tellraw` lines in `api/cb/*` (10), `core/internal/api/gamerule/debug_print` and the "passed the dynamic-command gate" notice to admins now write to `vortex:dbg` instead of chat. Menu and permission messages are unchanged.
